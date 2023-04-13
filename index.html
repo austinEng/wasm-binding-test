@@ -1,0 +1,194 @@
+<html>
+  <body>
+    <canvas></canvas>
+    <pre id="output"></pre>
+    <style>
+      #output {
+        white-space: pre-wrap;
+      }
+    </style>
+    <script type="module">
+      import initializeModule from './out/test.js';
+
+      const canvas = document.querySelector('canvas');
+      const gl = canvas.getContext('webgl2');
+      const output = document.getElementById('output');
+
+      const vertexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        0.0, 0.5, 0.0,
+        -0.5, -0.5, 0.0,
+        0.5, -0.5, 0.0,
+      ]), gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+      const vertShader = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vertShader, `
+      attribute vec3 a_coord;
+      void main() {
+          gl_Position = vec4(a_coord, 1.0);
+      }`);
+      gl.compileShader(vertShader);
+
+      const fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fragShader, `
+      precision mediump float;
+      uniform vec3 u_color;
+      void main() {
+          gl_FragColor = vec4(u_color, 1.0);
+      }`);
+      gl.compileShader(fragShader);
+
+      const shaderProgram = gl.createProgram();
+      gl.attachShader(shaderProgram, vertShader);
+      gl.attachShader(shaderProgram, fragShader);
+      gl.linkProgram(shaderProgram);
+
+      gl.useProgram(shaderProgram);
+      const aCoord = gl.getAttribLocation(shaderProgram, 'a_coord');
+      const uColor = gl.getUniformLocation(shaderProgram, 'u_color');
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+
+      gl.vertexAttribPointer(aCoord, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(aCoord);
+
+      gl.clearColor(0, 0, 0, 1);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.uniform3fv(uColor, [0, 1, 0]);
+
+      const adapter = await navigator.gpu.requestAdapter();
+      const device = await adapter.requestDevice();
+      const texture = device.createTexture({
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        size: [canvas.width, canvas.height]
+      });
+      const commandEncoder = device.createCommandEncoder();
+      const renderPassEncoder = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: texture.createView(),
+          loadOp: 'load',
+          storeOp: 'store',
+        }],
+      });
+
+      const Module = await initializeModule({
+        preinitializedWebGLContext: gl,
+        canvas,
+        instantiateWasm(imports, successCallback) {
+          Object.assign(imports.env, {
+            directGLDrawArrays: gl.drawArrays.bind(gl),
+            directRenderPassEncoderDraw: renderPassEncoder.draw.bind(renderPassEncoder),
+          });
+          WebAssembly.instantiateStreaming(fetch('./out/test.wasm'), imports)
+            .then(m => { successCallback(m.instance); });
+        }
+      });
+      Module._setupGL();
+      Module._setRenderPassHandle(Module.WebGPU.mgrRenderPassEncoder.create(renderPassEncoder));
+
+      const drawCount = 100000;
+      const trials = 10;
+
+      output.innerHTML = `
+Runs a WebGL / WebGPU test performing ${trials} trials of ${drawCount} draws.
+It tests:
+  - Running a WebGL draw loop in Javascript
+  - Running a WebGL draw loop in WASM using Emscripten's WebGL bindings
+  - Running a WebGL draw loop in WASM using custom bindings with WASM imports bound
+    directly to the WebGLRenderingContext object.
+  - Running a WebGPU draw loop in Javascript
+  - Running a WebGPU draw loop in WASM using Emscripten's WebGPU bindings.
+  - Running a WebGPU draw loop in WASM using custom bindings with WASM imports bound
+    directly to the GPURenderPassEncoder object.
+`
+      function log(text) {
+        output.innerHTML += text + '\n';
+        console.log(text);
+      }
+
+      function runGL(iterations) {
+        for (let i = 0; i < iterations; ++i) {
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+      }
+
+      function runWebGPU(iterations) {
+        for (let i = 0; i < iterations; ++i) {
+          renderPassEncoder.draw(3, 1);
+        }
+      }
+
+      log('Warming up...');
+      for (let i = 0; i < 10; ++i) {
+        runGL(drawCount);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        Module._runGL(drawCount);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        Module._runDirectGL(drawCount);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        runWebGPU(drawCount);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        Module._runWebGPU(drawCount);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        Module._runDirectWebGPU(drawCount);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      let jsTimeWebGL = 0;
+      let wasmTimeWebGL = 0;
+      let wasmDirectTimeWebGL = 0;
+      let jsTimeWebGPU = 0;
+      let wasmTimeWebGPU = 0;
+      let wasmDirectTimeWebGPU = 0;
+
+      let s;
+      for (let t = 0; t < trials; ++t) {
+        s = performance.now();
+        runGL(drawCount);
+        jsTimeWebGL += performance.now() - s;
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        s = performance.now();
+        Module._runGL(drawCount);
+        wasmTimeWebGL += performance.now() - s;
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        s = performance.now();
+        Module._runDirectGL(drawCount);
+        wasmDirectTimeWebGL += performance.now() - s;
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        s = performance.now();
+        runWebGPU(drawCount);
+        jsTimeWebGPU += performance.now() - s;
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        s = performance.now();
+        Module._runDirectWebGPU(drawCount);
+        wasmTimeWebGPU += performance.now() - s;
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        s = performance.now();
+        Module._runDirectWebGPU(drawCount);
+        wasmDirectTimeWebGPU += performance.now() - s;
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+
+      log(`webgl js ${jsTimeWebGL / trials} ms`);
+      log(`webgl wasm ${wasmTimeWebGL / trials} ms`);
+      log(`webgl wasm direct ${wasmDirectTimeWebGL / trials} ms`);
+      log(`webgpu js ${jsTimeWebGPU / trials} ms`);
+      log(`webgpu wasm ${wasmTimeWebGPU / trials} ms`);
+      log(`webgpu wasm direct ${wasmDirectTimeWebGPU / trials} ms`);
+    </script>
+  </body>
+</html>
