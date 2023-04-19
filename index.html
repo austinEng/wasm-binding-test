@@ -79,7 +79,7 @@
         canvas,
         instantiateWasm(imports, successCallback) {
           Object.assign(imports.env, {
-            directGLDrawArrays: gl.drawArrays.bind(gl),
+            directGLClearColor: gl.clearColor.bind(gl),
             directRenderPassEncoderDraw: renderPassEncoder.draw.bind(renderPassEncoder),
           });
           WebAssembly.instantiateStreaming(fetch('./out/test.wasm'), imports)
@@ -93,11 +93,18 @@
       const trials = 10;
 
       output.innerHTML = `
-Runs a WebGL / WebGPU test performing ${trials} trials of ${drawCount} draws.
-It tests:
-  - Running a WebGL draw loop in Javascript
-  - Running a WebGL draw loop in WASM using Emscripten's WebGL bindings
-  - Running a WebGL draw loop in WASM using custom bindings with WASM imports bound
+Runs a WebGL / WebGPU test performing ${trials} trials of ${drawCount} calls.
+It's a super synthetic benchmark designed to do a tiny function call in each of
+WebGL / WebGPU that should have minimal cost in the browser to try to isolate cost
+of the bindings.
+
+It tests the calls in pure JS, in WASM using Emscripten, and in WASM "direct" mode
+using custom bindings bound directly to the receiver.
+
+Tests:
+  - Running a WebGL glClearColor loop in Javascript
+  - Running a WebGL glClearColor loop in WASM using Emscripten's WebGL bindings
+  - Running a WebGL glClearColor loop in WASM using custom bindings with WASM imports bound
     directly to the WebGLRenderingContext object.
   - Running a WebGPU draw loop in Javascript
   - Running a WebGPU draw loop in WASM using Emscripten's WebGPU bindings.
@@ -111,7 +118,7 @@ It tests:
 
       function runGL(iterations) {
         for (let i = 0; i < iterations; ++i) {
-          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          gl.clearColor(0.1, 0.2, 0.3, 0.4);
         }
       }
 
@@ -146,18 +153,28 @@ It tests:
 
       let s;
       for (let t = 0; t < trials; ++t) {
+
+        // Run, but don't measure the first GL test.
+        // For some reason it's slower - flushing command buffer?
+        gl.flush();
+        runGL(drawCount);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        gl.flush();
         s = performance.now();
         runGL(drawCount);
         jsTimeWebGL += performance.now() - s;
 
         await new Promise(resolve => setTimeout(resolve, 10));
 
+        gl.flush();
         s = performance.now();
         Module._runGL(drawCount);
         wasmTimeWebGL += performance.now() - s;
 
         await new Promise(resolve => setTimeout(resolve, 10));
 
+        gl.flush();
         s = performance.now();
         Module._runDirectGL(drawCount);
         wasmDirectTimeWebGL += performance.now() - s;
@@ -183,12 +200,12 @@ It tests:
         await new Promise(resolve => setTimeout(resolve, 10));
       }
 
-      log(`webgl js ${jsTimeWebGL / trials} ms`);
-      log(`webgl wasm ${wasmTimeWebGL / trials} ms`);
-      log(`webgl wasm direct ${wasmDirectTimeWebGL / trials} ms`);
-      log(`webgpu js ${jsTimeWebGPU / trials} ms`);
-      log(`webgpu wasm ${wasmTimeWebGPU / trials} ms`);
-      log(`webgpu wasm direct ${wasmDirectTimeWebGPU / trials} ms`);
+      log(`webgl_javascript\t${jsTimeWebGL / trials} ms`);
+      log(`webgl_wasm_emscripten\t${wasmTimeWebGL / trials} ms`);
+      log(`webgl_wasm_direct\t${wasmDirectTimeWebGL / trials} ms`);
+      log(`webgpu_javascript\t${jsTimeWebGPU / trials} ms`);
+      log(`webgpu_wasm_emscripten\t${wasmTimeWebGPU / trials} ms`);
+      log(`webgpu_wasm_direct\t${wasmDirectTimeWebGPU / trials} ms`);
     </script>
   </body>
 </html>

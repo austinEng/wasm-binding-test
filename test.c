@@ -5,8 +5,7 @@
 #include <webgpu/webgpu.h>
 #include <emscripten/html5_webgpu.h>
 
-extern void directGLClear(unsigned int bitfield);
-extern void directGLDrawArrays(unsigned int mode, int first, int count);
+extern void directGLClearColor(float r, float g, float b, float a);
 
 extern void directRenderPassEncoderDraw(
   unsigned int vertexCount, unsigned int instanceCount,
@@ -24,14 +23,14 @@ void setupGL() {
 EMSCRIPTEN_KEEPALIVE
 void runGL(int iterations) {
   for (int i = 0; i < iterations; ++i) {
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glClearColor(0.1, 0.2, 0.3, 0.4);
   }
 }
 
 EMSCRIPTEN_KEEPALIVE
 void runDirectGL(int iterations) {
   for (int i = 0; i < iterations; ++i) {
-    directGLDrawArrays(GL_TRIANGLES, 0, 3);
+    directGLClearColor(0.1, 0.2, 0.3, 0.4);
   }
 }
 
