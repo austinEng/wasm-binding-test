@@ -1,10 +1,18 @@
 # WASM Binding Test
 
-Runs a WebGL / WebGPU test performing several trials of many draws.
-It tests:
-  - Running a WebGL draw loop in Javascript
-  - Running a WebGL draw loop in WASM using Emscripten's WebGL bindings
-  - Running a WebGL draw loop in WASM using custom bindings with WASM imports bound
+Runs a WebGL / WebGPU test performing 10 trials of 100000 calls.
+It's a super synthetic benchmark designed to do a tiny function call in each of
+WebGL / WebGPU that should have minimal cost in the browser to try to isolate cost
+of the bindings.
+Note: The point isn't to compare WebGL and WebGPU.
+
+It tests the calls in pure JS, in WASM using Emscripten, and in WASM "direct" mode
+using custom bindings bound directly to the receiver.
+
+Tests:
+  - Running a WebGL glClearColor loop in Javascript
+  - Running a WebGL glClearColor loop in WASM using Emscripten's WebGL bindings
+  - Running a WebGL glClearColor loop in WASM using custom bindings with WASM imports bound
     directly to the WebGLRenderingContext object.
   - Running a WebGPU draw loop in Javascript
   - Running a WebGPU draw loop in WASM using Emscripten's WebGPU bindings.

@@ -58,15 +58,15 @@
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.uniform3fv(uColor, [0, 1, 0]);
 
-      const adapter = await navigator.gpu.requestAdapter();
-      const device = await adapter.requestDevice();
-      const texture = device.createTexture({
+      const adapter = await navigator.gpu?.requestAdapter();
+      const device = await adapter?.requestDevice();
+      const texture = device?.createTexture({
         format: 'rgba8unorm',
         usage: GPUTextureUsage.RENDER_ATTACHMENT,
         size: [canvas.width, canvas.height]
       });
-      const commandEncoder = device.createCommandEncoder();
-      const renderPassEncoder = commandEncoder.beginRenderPass({
+      const commandEncoder = device?.createCommandEncoder();
+      const renderPassEncoder = commandEncoder?.beginRenderPass({
         colorAttachments: [{
           view: texture.createView(),
           loadOp: 'load',
@@ -80,7 +80,7 @@
         instantiateWasm(imports, successCallback) {
           Object.assign(imports.env, {
             directGLClearColor: gl.clearColor.bind(gl),
-            directRenderPassEncoderDraw: renderPassEncoder.draw.bind(renderPassEncoder),
+            directRenderPassEncoderDraw: renderPassEncoder ? renderPassEncoder.draw.bind(renderPassEncoder) : () => {},
           });
           WebAssembly.instantiateStreaming(fetch('./out/test.wasm'), imports)
             .then(m => { successCallback(m.instance); });
@@ -117,6 +117,10 @@ Tests:
         console.log(text);
       }
 
+      if (!renderPassEncoder) {
+        log('\nNo WebGPU support! Those tests will be skipped.\n')
+      }
+
       function runGL(iterations) {
         for (let i = 0; i < iterations; ++i) {
           gl.clearColor(0.1, 0.2, 0.3, 0.4);
@@ -137,12 +141,15 @@ Tests:
         await new Promise(resolve => setTimeout(resolve, 10));
         Module._runDirectGL(drawCount);
         await new Promise(resolve => setTimeout(resolve, 10));
-        runWebGPU(drawCount);
-        await new Promise(resolve => setTimeout(resolve, 10));
-        Module._runWebGPU(drawCount);
-        await new Promise(resolve => setTimeout(resolve, 10));
-        Module._runDirectWebGPU(drawCount);
-        await new Promise(resolve => setTimeout(resolve, 100));
+
+        if (renderPassEncoder) {
+          runWebGPU(drawCount);
+          await new Promise(resolve => setTimeout(resolve, 10));
+          Module._runWebGPU(drawCount);
+          await new Promise(resolve => setTimeout(resolve, 10));
+          Module._runDirectWebGPU(drawCount);
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
 
       let jsTimeWebGL = 0;
@@ -182,31 +189,36 @@ Tests:
 
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        s = performance.now();
-        runWebGPU(drawCount);
-        jsTimeWebGPU += performance.now() - s;
+        if (renderPassEncoder) {
+          s = performance.now();
+          runWebGPU(drawCount);
+          jsTimeWebGPU += performance.now() - s;
 
-        await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise(resolve => setTimeout(resolve, 10));
 
-        s = performance.now();
-        Module._runWebGPU(drawCount);
-        wasmTimeWebGPU += performance.now() - s;
+          s = performance.now();
+          Module._runWebGPU(drawCount);
+          wasmTimeWebGPU += performance.now() - s;
 
-        await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise(resolve => setTimeout(resolve, 10));
 
-        s = performance.now();
-        Module._runDirectWebGPU(drawCount);
-        wasmDirectTimeWebGPU += performance.now() - s;
+          s = performance.now();
+          Module._runDirectWebGPU(drawCount);
+          wasmDirectTimeWebGPU += performance.now() - s;
 
-        await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
       }
 
       log(`webgl_javascript\t${jsTimeWebGL / trials} ms`);
       log(`webgl_wasm_emscripten\t${wasmTimeWebGL / trials} ms`);
       log(`webgl_wasm_direct\t${wasmDirectTimeWebGL / trials} ms`);
-      log(`webgpu_javascript\t${jsTimeWebGPU / trials} ms`);
-      log(`webgpu_wasm_emscripten\t${wasmTimeWebGPU / trials} ms`);
-      log(`webgpu_wasm_direct\t${wasmDirectTimeWebGPU / trials} ms`);
+
+      if (renderPassEncoder) {
+        log(`webgpu_javascript\t${jsTimeWebGPU / trials} ms`);
+        log(`webgpu_wasm_emscripten\t${wasmTimeWebGPU / trials} ms`);
+        log(`webgpu_wasm_direct\t${wasmDirectTimeWebGPU / trials} ms`);
+      }
     </script>
   </body>
 </html>
