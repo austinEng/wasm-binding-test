@@ -97,6 +97,7 @@ Runs a WebGL / WebGPU test performing ${trials} trials of ${drawCount} calls.
 It's a super synthetic benchmark designed to do a tiny function call in each of
 WebGL / WebGPU that should have minimal cost in the browser to try to isolate cost
 of the bindings.
+Note: The point isn't to compare WebGL and WebGPU.
 
 It tests the calls in pure JS, in WASM using Emscripten, and in WASM "direct" mode
 using custom bindings bound directly to the receiver.
