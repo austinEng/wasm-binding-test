@@ -19,6 +19,6 @@ Tests:
   - Running a WebGPU draw loop in WASM using custom bindings with WASM imports bound
     directly to the GPURenderPassEncoder object.
 
-Try running with:
+Use a new --user-data-dir= for each configuration, and try running in Chrome with:
  - --enable-features=V8TurboFastApiCalls
  - --disable-features=V8TurboFastApiCalls
